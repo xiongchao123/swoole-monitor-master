@@ -22,6 +22,7 @@ Swoole版本请选用1.8.1以上版本。
     
 ## 使用方法
 * 配置文件位于/config/目录下,app.php配置一些全局变量,database.php配置mysql或者redis连接配置。可通过config("")方法获取变量值。如config("database.redis")获取redis连接配置。
+* app/Server/Server.php swoole进程设置中的IP、port以及配置选项都可在/config目录下作配置。(本例中并未如此)
    
 ## 运行
 
