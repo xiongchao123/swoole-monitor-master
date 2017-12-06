@@ -55,6 +55,8 @@ class Client
         $this->client->send(pack("C",0));      //包体是否压缩
 
         $this->client->send(pack("V",$length));  //整个消息的长度(包头+包体)
+        $crc=sprintf("%u",crc32(pack("C",1).pack("C",5).pack("C",0).pack("C",0).pack("V",$length)));
+        $this->client->send(pack("V",$crc));
         $this->client->send($uuid);          //请求者ID
 
         $this->client->send($message);
@@ -66,7 +68,9 @@ class Client
             $this->client->send(pack("C",3));      //消息类别
             $this->client->send(pack("C",0));      //包体是否加密
             $this->client->send(pack("C",0));      //包体是否压缩
-            $this->client->send(pack("V",41));  //整个消息的长度(包头+包体)
+            $this->client->send(pack("V",45));  //整个消息的长度(包头+包体)
+            $crc=sprintf("%u",crc32(pack("C",1).pack("C",3).pack("C",0).pack("C",0).pack("V",45)));
+            $this->client->send(pack("V",$crc));
             $this->client->send($uuid);  //整个消息的长度(包头+包体)
         });
     }
@@ -76,9 +80,9 @@ class Client
         var_dump($reply_header);
         $lenght=unpack("V",substr($data,4,4))[1];
         echo "lenght: ".$lenght.PHP_EOL;
-        $uuid=substr($data,8,33);
+        $uuid=substr($data,12,33);
         echo $uuid.PHP_EOL;
-        $body=substr($data,41,$lenght-41);
+        $body=substr($data,45,$lenght-45);
         echo strlen($body)."   ".$body.PHP_EOL;
     }
 

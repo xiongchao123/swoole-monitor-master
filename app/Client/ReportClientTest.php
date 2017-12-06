@@ -55,6 +55,8 @@ class Client
         $this->client->send(pack("C",0));      //包体是否压缩
 
         $this->client->send(pack("V",$length));  //整个消息的长度(包头+包体)
+        $crc=sprintf("%u",crc32(pack("C",1).pack("C",7).pack("C",0).pack("C",0).pack("V",$length)));
+        $this->client->send(pack("V",$crc));
         $this->client->send($uuid);          //请求者ID
 
         $this->client->send($message);
@@ -67,6 +69,8 @@ class Client
             $this->client->send(pack("C",0));      //包体是否加密
             $this->client->send(pack("C",0));      //包体是否压缩
             $this->client->send(pack("V",$length));  //整个消息的长度(包头+包体)
+            $crc=sprintf("%u",crc32(pack("C",1).pack("C",7).pack("C",0).pack("C",0).pack("V",$length)));
+            $this->client->send(pack("V",$crc));
             $this->client->send($uuid);  //整个消息的长度(包头+包体)
             $this->client->send($message);
         });

@@ -16,7 +16,7 @@ class Server
 {
     // TODO ....可将消息类型定义为常量 本例并未设置
 
-    const PAG_HEAD_LENGHT = 41;  //包头长度
+    const PAG_HEAD_LENGHT = 45;  //包头长度
     const REPLY_MAX_BODY = 81920;
     const CLIENTS_KEY = "TCP_CONNECT_CLIENTS";  //save clients to redis key
     const PUSH_CLIENTS_KEY = "TCP_PUSH_CONNECT_CLIENTS";  //save clients to redis key
@@ -73,11 +73,21 @@ class Server
                     $this->writer->error("包体压缩标识错误: " . $Header_C[4]);
                     return -1;
                 }
-                if (strlen($data) !== unpack("V", substr($data, 4, 4))[1]) {
-                    $this->writer->error("包长度字段错误: " . unpack("V", $data)[1]);
+                $Header_V = unpack("V2", substr($data, 4, 8));
+                $package_length = $Header_V[1];
+                $reqcrc = $Header_V[2];
+                //判断crc32校验和
+                $headcrc = sprintf("%u", crc32(substr($data, 0, 8)));
+                $this->writer->info(gettype($reqcrc) . ":" . $reqcrc);
+                $this->writer->info(gettype($headcrc) . ":" . $headcrc);
+                if ((string)$reqcrc !== $headcrc) {
+                    $this->writer->error("crc32校验和错误: " . "reqcrc=$reqcrc,headcrc=$headcrc");
                     return -1;
                 }
-                return strlen($data);
+                if (strlen($data) < $package_length) {
+                    return 0;
+                }
+                return $package_length;
             },
             'package_max_length' => 81920,   //所能接收的包最大长度 根据实际情况自行配置
             'task_max_request' => 100,  //最大task进程请求数
@@ -240,7 +250,7 @@ class Server
         //先获取请求数据.包括包头和包体
         $fd = $param['fd'];
         $data = $param['data'];
-        $uuid = substr($data, 8, 33);
+        $uuid = substr($data, 12, 33);
         $Header_C = unpack("C4", $data);
         //消息类别
         $msg_type = $Header_C[2];
@@ -337,8 +347,10 @@ class Server
                 $push_clients = $this->getValue($redis, self::PUSH_CLIENTS_KEY);
                 if ($push_clients)
                     $push_clients = unserialize($push_clients);
-                foreach ($push_clients as $fd => $value) {
-                    $this->send($fd, $value['reply_header'], $reply_body);
+                if (is_array($push_clients) && count($push_clients) > 0) {
+                    foreach ($push_clients as $fd => $value) {
+                        $this->send($fd, $value['reply_header'], $reply_body);
+                    }
                 }
                 break;
         }
@@ -472,7 +484,9 @@ class Server
             }
         }
         $reply_msg_lenght = self::PAG_HEAD_LENGHT + strlen($reply_body_str);
-        $reply_msg = pack("C", $reply_header['reply_version']) . pack("C", $reply_header['reply_msg_type']) . pack("C", $reply_header['replyCipher']) . pack("C", $reply_header['replyCompress']) . pack("V", $reply_msg_lenght) . $reply_header['uuid'] . $reply_body_str;
-        $this->serv->send($fd, $reply_msg);
+        $reply_crc_bf = pack("C", $reply_header['reply_version']) . pack("C", $reply_header['reply_msg_type']) . pack("C", $reply_header['replyCipher']) . pack("C", $reply_header['replyCompress']) . pack("V", $reply_msg_lenght);
+        $reply_crc = pack("V", sprintf("%u", crc32($reply_crc_bf)));
+        $reply_crc_af = $reply_header['uuid'] . $reply_body_str;
+        $this->serv->send($fd, $reply_crc_bf . $reply_crc . $reply_crc_af);
     }
 }
