@@ -1,5 +1,5 @@
 {
-    "name"       : "swoole/monitor/master",
+    "name"       : "xiongchao/swoole/monitor",
     "description": "PHP Networking framework & Application Server.",
 	"type"       : "library",
     "keywords"   : ["library","tcp", "socket", "server", "protocol", "client", "framework"],
