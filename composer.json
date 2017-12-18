@@ -1,4 +1,6 @@
 {
+    "name"       : "swoole-monitor-master",
+    "description": "PHP Networking framework & Application Server.",
     "require": {
         "php": ">=5.5.9",
         "predis/predis": "1.0.*"
