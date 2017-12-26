@@ -46,7 +46,7 @@ class Client
             'code'=>'demo',
             'status'=>'1'
         ]);
-        $length=41+strlen($message);
+        $length=45+strlen($message);
        // $length=41;
         $uuid=md5(uniqid(microtime(true),true)) . "t";
         $this->client->send(pack("C",1));      //版本号 固定为1
