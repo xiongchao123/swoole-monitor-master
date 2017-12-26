@@ -6,10 +6,11 @@
  * Date: 2017/8/25
  * Time: 9:46
  */
-namespace App\Server;
+namespace App\Server\Scripts;
 
 use App\Foundation\Server\HandleServer;
 use App\Log\Writer;
+use Predis\PredisException;
 
 class Swoole
 {
@@ -17,12 +18,10 @@ class Swoole
     // TODO ....可将消息类型定义为常量 本例并未设置
     const PAG_HEAD_LENGHT = 45;  //包头长度
     const REPLY_MAX_BODY = 81920;
-    const CLIENTS_KEY = "TCP_CONNECT_CLIENTS";  //save clients to redis key
-    const PUSH_CLIENTS_KEY = "TCP_PUSH_CONNECT_CLIENTS";  //save clients to redis key
     public $serv;   //swoole server
     private $writer;  //log writer object
-    private $redis_config;   //redis connect config
-    private $process_title;    //process_title
+    private $ini;
+    private $master_pid;
 
     /**
      * 初始化swoole
@@ -30,17 +29,29 @@ class Swoole
     public function __construct()
     {
         $this->writer = new Writer();
-        $this->redis_config = config("database.redis.default");
     }
 
     public function start($ini)
     {
-        $this->serv = new \swoole_server($ini['host'], $ini['port'], $ini['mode'], $ini['sock_type']);
-        $this->process_title = $ini['process_title'];
-        //配置选项定义在config目录下
-        $serve_config = config("serve.serve");
-        if (empty($serve_config['package_length_func'])) {
-            $serve_config['package_length_func'] = function ($data) {
+        $this->ini=$ini;
+        $this->serv = new \swoole_server($ini['host'], $ini['port'], SWOOLE_PROCESS, SWOOLE_SOCK_TCP);
+        //配置选项
+        $this->serv->set([
+            'worker_num' => 1,   //worker进程数,生产环境下可以根据需求设置
+            'reactor_num' => 1,   //通过此参数来调节主进程内事件处理线程的数量，以充分利用多核。默认会启用CPU核数相同的数量。一般设置为CPU核数的1-4倍
+            'daemonize' => false,
+            'backlog' => 1000,  //Listen队列长度，
+            'task_worker_num' => 1,     //设置此参数后，服务器会开启异步task功能。此时可以使用task方法投递异步任务。
+            'max_request' => 10000,
+            'dispatch_mode' => 2,  //数据包分发策略  默认为2 固定模式
+            // 'open_eof_check' => true, //打开EOF检测
+            // 'package_eof' => "\r\n", //设置EOF
+            'open_length_check' => true,   //打开固定包头协议解析功能
+            //'package_length_offset' => 0,  //规定了包头中第几个字节开始是长度字段
+            //'package_body_offset' => 42,    //规定了包头的长度
+            //'package_body_offset' => 0,    //length的值包含了整个包（包头+包体）
+            //'package_length_type' => 'V',   //规定了长度字段的类型
+            'package_length_func' =>function ($data) {
                 if (strlen($data) < self::PAG_HEAD_LENGHT) {
                     return 0;
                 }
@@ -77,12 +88,24 @@ class Swoole
                     return 0;
                 }
                 return $package_length;
-            };
-        }
-        $this->serv->set($serve_config);
+            },
+            'package_max_length' => 81920,   //所能接收的包最大长度 根据实际情况自行配置
+            'task_max_request' => 100,  //最大task进程请求数
+            'heartbeat_idle_time' => 120,  //表示连接最大允许空闲的时间
+            'heartbeat_check_interval' => 60,  //轮询检测时间
+            'log_file' => ROOT_PATH . 'storage/logs/swoole.log'
+        ]);
         $this->serv->on('Start', array(
             $this,
             'onStart'
+        ));
+        $this->serv->on('ManagerStart', array(
+            $this,
+            'onManagerStart'
+        ));
+        $this->serv->on('WorkerStart', array(
+            $this,
+            'onWorkerStart'
         ));
         $this->serv->on('Connect', array(
             $this,
@@ -95,10 +118,6 @@ class Swoole
         $this->serv->on('Close', array(
             $this,
             'onClose'
-        ));
-        $this->serv->on('WorkerStart', array(
-            $this,
-            'onWorkerStart'
         ));
         //1.7？ 版本后不支持
         /* $this->serv->on('Timer', array(
@@ -125,14 +144,42 @@ class Swoole
      */
     public function onStart($serv)
     {
+        $this->master_pid=$serv->master_pid;
         // 设置进程名称
-       if (!empty($this->process_title)) {
-          //  cli_set_process_title($this->process_title);
-        }
-
-        //start redis connect to clear clients
+        $this->set_process_name();
+        //start redis connect to clear clients & set the master process pid
         //use phpredis or predis
-        $this->listenTcpStart();
+        try{
+            $this->listenTcpStart();
+        }catch (PredisException $e){
+           // $output=new OutputFormatter(true);
+           // echo $output->format("<error>".$e->getMessage()."</error>");
+            $this->writer->error("<error>".$e->getMessage()."</error>");
+            \Swoole\Async::exec("kill -TERM $this->master_pid", function ($result, $status) {
+
+            });
+        }
+    }
+
+    /**
+     * 当管理进程启动时调用它
+     * @param $serv
+     */
+    public function onManagerStart($serv){
+        $this->set_process_name();
+    }
+
+    /**
+     * 此事件在worker进程/task进程启动时发生
+     *
+     * @param swoole_server $serv
+     * @param int $worker_id
+     */
+    function onWorkerStart($serv, $worker_id)
+    {
+        $this->set_process_name();
+        //进程都为独立进程,数据不可共享
+        //可设置tick异步定时任务处理业务上的逻辑
     }
 
     /**
@@ -222,17 +269,6 @@ class Swoole
         echo "Result: {$data}\n";
     }
 
-    /**
-     * 此事件在worker进程/task进程启动时发生
-     *
-     * @param swoole_server $serv
-     * @param int $worker_id
-     */
-    function onWorkerStart($serv, $worker_id)
-    {
-        //进程都为独立进程,数据不可共享
-        //可设置tick异步定时任务处理业务上的逻辑
-    }
 
     /**
      * 定时任务
@@ -254,16 +290,14 @@ class Swoole
     private function tickerEvent($serv)
     {
         // TODO 根据实际情况进行操作
-        /*  try {
-              if ($serv->redis->ping() !== "+PONG") {
-                  $this->writer->warning("存储客户端Redis连接断开");
-                  $serv->redis->close();
-                  $serv->redis = new Client($this->redis_config);;
-              }
-          } catch (PredisException $e) {
-              $this->writer->error("存储客户端Redis连接异常" . $e->getMessage());
-              $serv->redis->close();
-              $serv->redis = new Client($this->redis_config);;
-          }*/
+    }
+
+    function set_process_name(){
+        // 设置进程名称
+        if (!empty($this->ini['process_title'])) {
+            if (!cli_set_process_title($this->ini['process_title'])) {
+                $this->writer->warning("Unable to set process title for PID $this->master_pid...");
+            }
+        }
     }
 }

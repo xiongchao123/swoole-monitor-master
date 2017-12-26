@@ -11,14 +11,60 @@
 namespace App\Foundation\Server;
 
 use App\Foundation\Cache\HandleRedis;
-use App\Server\Swoole;
+use App\Server\Scripts\Swoole;
+use App\Server\Server;
 use App\util\AesCrypt;
 use App\util\GetUniqueString;
+
 
 trait HandleServer
 {
     use HandleRedis;
 
+    private $client_keys = "TCP_CONNECT_CLIENTS";  //save clients to redis key
+    private $push_client_keys = "TCP_PUSH_CONNECT_CLIENTS";  //save clients to redis key
+
+
+    private function listenTcpStart()
+    {
+        $this->connectR();
+        $this->redis->del($this->client_keys);
+        $this->redis->del($this->push_client_keys);
+        $this->redis->hset(Server::$master_pid_key, $this->ini["serve_name"], $this->master_pid);
+        $this->closeR();
+    }
+
+
+    /**
+     * @param $fd
+     */
+    private function listenTcpClose($fd)
+    {
+        try {
+            $this->connectR();
+            if ($this->redis->exists($this->client_keys)) {
+                $clients = unserialize($this->getR($this->client_keys));
+                if (isset($clients[$fd]))
+                    unset($clients[$fd]);
+                $this->setR($this->client_keys, serialize($clients));
+            }
+            if ($this->redis->exists($this->push_client_keys)) {
+                $push_clients = unserialize($this->getR($this->push_client_keys));
+                if (isset($push_clients[$fd]))
+                    unset($push_clients[$fd]);
+                $this->setR($this->push_client_keys, serialize($push_clients));
+            }
+            $this->closeR();
+        } catch (\RedisException $e) {
+
+        }
+    }
+
+
+    /**
+     * @param $serv
+     * @param $param
+     */
     protected function handleTask($serv, $param)
     {
         //响应消息头
@@ -66,13 +112,13 @@ trait HandleServer
                 $reply_body['data'] = ["cipher_key" => $clients[$fd]['cipher_key']];
                 $this->setR($this->client_keys, serialize($clients));
                 $this->closeR();
-                $this->send($serv,$fd, $reply_header, $reply_body, $clients[$fd]['cipher_key']);
+                $this->send($serv, $fd, $reply_header, $reply_body, $clients[$fd]['cipher_key']);
                 break;
             //请求心跳
             case 3:
                 $reply_header['reply_msg_type'] = 4;
                 $reply_body['data'] = ["heartbeat" => time()];
-                $this->send($serv,$fd, $reply_header, $reply_body);
+                $this->send($serv, $fd, $reply_header, $reply_body);
                 break;
             //推送请求  single
             case 5:
@@ -111,7 +157,7 @@ trait HandleServer
                     $reply_body['errCode'] = -1;
                     $reply_body['msg'] = "错误格式的消息体";
                     $reply_body['data'] = $req_body;
-                    $this->send($serv,$fd, $reply_header, $reply_body);
+                    $this->send($serv, $fd, $reply_header, $reply_body);
                     $serv->close($fd);
                 }
                 $this->closeR();
@@ -132,7 +178,7 @@ trait HandleServer
                     $push_clients = unserialize($push_clients);
                 if (is_array($push_clients) && count($push_clients) > 0) {
                     foreach ($push_clients as $fd => $value) {
-                        $this->send($serv,$fd, $value['reply_header'], $reply_body);
+                        $this->send($serv, $fd, $value['reply_header'], $reply_body);
                     }
                 }
                 $this->closeR();
@@ -148,7 +194,7 @@ trait HandleServer
      * @param $reply_body
      * @param $cipher_key
      */
-    function send($serv,$fd, &$reply_header, $reply_body, $cipher_key = '')
+    function send($serv, $fd, &$reply_header, $reply_body, $cipher_key = '')
     {
         $reply_body_str = json_encode($reply_body);
         if ($reply_header['replyCompress'] === 0 && strlen($reply_body_str) > Swoole::REPLY_MAX_BODY) {

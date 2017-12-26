@@ -6,13 +6,17 @@
 
 ## 安装
 
+> PHP版本需求： PHP5.4/PHP5.5/PHP5.6/PHP7.0/PHP7.1，不支持PHP5.3
+* git下载
+> git clone https://github.com/xiongchao123/swoole-monitor-master.git
+* composer 安装
+> composer require xiongchao/swoole-monitor
+
 安装PHP`swoole`拓展：`pecl install swoole`
 
 或到[swoole官网](http://www.swoole.com/)获取安装帮助
 
 Swoole版本请选用1.8.1以上版本。
-
-安装第三方包及自动加载机制 composer install or composer update
 
 ## 实现
 
@@ -21,24 +25,84 @@ Swoole版本请选用1.8.1以上版本。
 * 传入不同的消息类型,master端对其进行处理
     
 ## 使用方法
-* 配置文件位于/config/目录下,app.php配置一些全局变量,database.php配置mysql或者redis连接配置。可通过config("")方法获取变量值。如config("database.redis")获取redis连接配置。
-* app/Server/Server.php swoole进程设置中的IP、port以及配置选项都可在/config目录下作配置。(本例中并未如此)
-   
+* 配置文件swoole.ini用于配置swoole协议参数
+```
+    ;swoole server config set
+    [server]
+    host = 0.0.0.0   ;监听的网络地址
+    port = 9503      ;监听的端口
+    process_title=monitor_master  ;自定义设置进程名称,可为空 windows&macos下不支持
+    ;swoole执行脚本文件名 位于app/Serve/scripts 目录下
+    script_path=Swoole.php
+    
+    [server2]
+    host = 0.0.0.0
+    port = 9504
+    process_title=monitor_master2
+    script_path=Swoole.php
+
+```
+* 全局的配置文件如数据库、redis等连接信息位于/config/目录下,可通过config("")方法获取变量值。如config("database.redis")获取redis连接配置。
+* 通过脚本artisan.php进行进程管理。start|stop|restart|reload|status等操作。
+* php artisan.php --help 或者-h 可查看命令帮助,php artisan.php --help
+* php artisan.php list 可查看命令列表
+  
 ## 运行
 
-开启服务：
+#### 开启服务：
+
+* 启动所有服务
+``` bash
+tcp:serve为自定义的命令名称,--daemon为可选参数(在 start、restart和reload的时候可加),默认为false,设置为true的时候进程以守护进程模式启动
+php artisan.php tcp:serve start --daemon=true
+测试结果如下:
+[server] 服务启动成功,进程ID: 21836
+[server2] 服务启动成功,进程ID: 21845
+
+php artisan.php tcp:serve stop
+测试结果如下:
+[server]服务进程ID:21836,已停止
+[server2]服务进程ID:21845,已停止
+
+...
+
+```
+* 启动单个服务
 
 ``` bash
-开启swoole_server端
-进入master目录
-php app/App.php -i e 
+tcp:single为自定义的命令名称,--option为并填参数,可为start|stop|restart|reload|status,--serve为并填参数,为配置文件swoole.ini中的section值,--daemon为可选参数(在 start、restart和reload的时候可加),默认为false,设置为true的时候进程以守护进程模式启动
+php artisan.php tcp:single --option=start --serve=server --daemon=true
+测试结果如下:
+[server] 服务启动成功,进程ID: 21836
+
+php artisan.php tcp:single --option=stop --serve=server 
+测试结果如下:
+[server]服务进程ID:21836,已停止
+
+...
+
+```
+#### 测试服务
+
+* 查看服务运行状态
+``` bash
+php artisan.php tcp:serve status
+
+php artisan.php tcp:single --option=status --serve=server 
+
+```
+* 测试服务通讯是否正常
+
+``` bash
+
 模拟接收推送数据
 php App/Client/PushClientTest.php
 模拟上报数据(本例将上报数据推送给接收推送的所有客户端)
 php App/Client/ReportClientTest.php
+
 ```
 
-## 服务端接口协议
+## 测试服务端接口协议
 ####  通信协议为长连接，字节流，包含消息头和消息体两部分
 
 |名称|长度|说明|

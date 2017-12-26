@@ -10,7 +10,8 @@ date_default_timezone_set('Asia/Shanghai');
 define('ROOT_PATH', __DIR__ . '/../');
 require_once ROOT_PATH.'vendor/autoload.php';
 //加载全局异常处理
-new \App\Exceptions\HandleExceptions();
+//new \App\Exceptions\HandleExceptions();
+
 require_once ROOT_PATH .'app/util/file.php';
 require_once ROOT_PATH .'app/util/helpers.php';
 

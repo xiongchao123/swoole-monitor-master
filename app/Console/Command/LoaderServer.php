@@ -34,20 +34,19 @@ class LoaderServer extends Command
     {
         $args = $input->getArguments();
         $name = strtolower($args['name']);
-        $is_daemon=false;
-        $daemon=$input->getOption('daemon');
-        if(!empty($daemon)){
-            if($daemon !== "true" && $daemon !== "false"){
+        $is_daemon = false;
+        $daemon = $input->getOption('daemon');
+        if (!empty($daemon)) {
+            if ($daemon !== "true" && $daemon !== "false") {
                 $output->writeln("<error>undefined option for $daemon</error>");
                 return;
             }
-            $is_daemon=true;
+            $is_daemon = true;
         }
-       switch ($name) {
+        switch ($name) {
             case "start":
                 //加载swoole ini 配置
                 Server::loadIni();
-
                 //启动server进程
                 Server::start($is_daemon);
                 break;
@@ -59,6 +58,14 @@ class LoaderServer extends Command
                 break;
             case "restart":
             case "reload":
+                //加载swoole ini 配置
+                Server::loadIni();
+                Server::restart($is_daemon);
+                break;
+            case "status":
+                //加载swoole ini 配置
+                Server::loadIni();
+                Server::status();
                 break;
             default:
                 $output->writeln("<error>undefined command for $name</error>");
@@ -66,11 +73,4 @@ class LoaderServer extends Command
         }
     }
 
-    static function init($name, $file)
-    {
-        /*$code = "<?php\nnamespace App\\Controller;\n\n";
-        $code .= "use Swoole\\Controller;\n\n";
-        $code .= "class $name extends Controller\n{\n\n}";
-        return file_put_contents($file, $code);*/
-    }
 }

@@ -12,10 +12,11 @@ use Predis\Client;
 trait HandleRedis
 {
 
+    /**
+     * @var Client
+     */
     private $redis;
     private $redis_config;   //redis connect config
-    private $client_keys = "TCP_CONNECT_CLIENTS";  //save clients to redis key
-    private $push_client_keys = "TCP_PUSH_CONNECT_CLIENTS";  //save clients to redis key
 
 
     /**
@@ -29,37 +30,6 @@ trait HandleRedis
         /* $this->redis=new \Redis();
          $this->redis->connect($this->redis_config['host'], $this->redis_config['port'], $this->redis_config['timeout'] ?? null);
          $this->redis->select($this->redis_config['database'] ?? 0);*/
-    }
-
-    private function listenTcpStart()
-    {
-        $this->connectR();
-        $this->redis->del($this->client_keys);
-        $this->redis->del($this->push_client_keys);
-        $this->closeR();
-    }
-
-
-    private function listenTcpClose($fd)
-    {
-        try{
-            $this->connectR();
-            if ($this->redis->exists($this->client_keys)) {
-                $clients = unserialize($this->getR($this->client_keys));
-                if (isset($clients[$fd]))
-                    unset($clients[$fd]);
-                $this->setR($this->client_keys, serialize($clients));
-            }
-            if ($this->redis->exists($this->push_client_keys)) {
-                $push_clients = unserialize($this->getR($this->push_client_keys));
-                if (isset($push_clients[$fd]))
-                    unset($push_clients[$fd]);
-                $this->setR($this->push_client_keys, serialize($push_clients));
-            }
-            $this->closeR();
-        }catch (\RedisException $e){
-
-        }
     }
 
 

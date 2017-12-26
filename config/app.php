@@ -7,7 +7,7 @@
  */
 
 return [
-    'logfile'=>'larvel.log',
+    'logfile'=>'monitor.log',
     'log'=>'daily',
     'log_path'=>ROOT_PATH.'storage/logs/'
 ];
