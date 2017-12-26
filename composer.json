@@ -3,6 +3,7 @@
     "description": "PHP Networking framework & Application Server.",
 	"type"       : "library",
     "keywords"   : ["library","tcp", "socket", "server", "protocol", "client", "framework"],
+    "license"    : "MIT",
     "require": {
         "php": ">=5.5.9",
         "predis/predis": "1.0.*",

@@ -7,10 +7,10 @@
 ## 安装
 
 > PHP版本需求： PHP5.4/PHP5.5/PHP5.6/PHP7.0/PHP7.1，不支持PHP5.3
-* git下载
+* git安装
 > git clone https://github.com/xiongchao123/swoole-monitor-master.git
 * composer 安装
-> composer require xiongchao/swoole-monitor
+> composer create-project xiongchao/swoole-monitor
 
 安装PHP`swoole`拓展：`pecl install swoole`
 
